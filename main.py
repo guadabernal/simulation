@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
+from matplotlib.widgets import Button, CheckButtons
 from matplotlib.gridspec import GridSpec
 import functools
 
@@ -9,12 +9,12 @@ from map_utils import generate_floor_plan, plot_floor_plan, plot_robot_view, plo
 from robot_utils import move_robot, sense_environment, check_collision
 from vine_robot_utils import move_vine_robot
 
-from gui_utils import speed_up, slow_down, start_simulation, add_robot, add_vine_robot, kill_simulation, add_heat_map
+from gui_utils import speed_up, slow_down, start_simulation, add_vine_robot, kill_simulation, add_heat_map
 
 
 def main():
     grid_size = (50, 50)
-    robot_diameter = 4.0
+    robot_diameter = 4.0  # Define robot diameter
 
     # x,y,width,height
     walls = [ (5, 5, 10, 2),  
@@ -38,6 +38,12 @@ def main():
     simulation_running = [False]
     adding_robot = [False]
 
+    sensor_options = ['Cone Vision', 'Heat Sensor']
+    selecting_sensors = [False]
+    sensor_selections = {}
+    sensor_widgets = {}
+    adding_rr = [False]
+
     plt.ion()
 
     # GridSpec dynamic subplot
@@ -52,34 +58,106 @@ def main():
     adding_vine_robot_stage = [0]  # 0: not adding 1: need start point 2: need orientation point
     step = 0
 
-
+    # Updated drop_rescue_roller function
     def drop_rescue_roller(event):
         if len(vine_robot['positions']) > 0:
-            tip_x, tip_y = vine_robot['positions'][-1]
-            offset_distance = 2
-            orientation = vine_robot['orientation']
-            new_x = tip_x + offset_distance * np.cos(orientation)
-            new_y = tip_y + offset_distance * np.sin(orientation)
-            new_position = (new_x, new_y)
-            int_x, int_y = int(round(new_position[0])), int(round(new_position[1]))
-            
-            if ( 0 <= int_x < floor_plan.shape[0]
-                and 0 <= int_y < floor_plan.shape[1]
-                and floor_plan[int_x, int_y] == 1
-                and not check_collision(new_position, None, robots, floor_plan, robot_diameter)):
-                
-                orientation = np.random.uniform(0, 2 * np.pi)
-                robot = {'position': new_position, 'orientation': orientation}
-                robots.append(robot)
-                print(f"RESCUE Roller deployed at ({int_x}, {int_y}) with orientation {orientation:.2f} radians")
-            else:
-                print("Cannot deploy RESCUE Roller at this position. It may be blocked or occupied.")
+            if selecting_sensors[0]:
+                print("Please complete the current sensor selection first.")
+                return
+            adding_rr[0] = True
+            start_sensor_selection()
         else:
             print("Vine robot has not been placed or has not moved yet.")
 
+    def create_robot_after_sensor_selection():
+        tip_x, tip_y = vine_robot['positions'][-1]
+        offset_distance = 2
+        orientation = vine_robot['orientation']
+        new_x = tip_x + offset_distance * np.cos(orientation)
+        new_y = tip_y + offset_distance * np.sin(orientation)
+        new_position = (new_x, new_y)
+        int_x, int_y = int(round(new_position[0])), int(round(new_position[1]))
+        
+        if ( 0 <= int_x < floor_plan.shape[0]
+            and 0 <= int_y < floor_plan.shape[1]
+            and floor_plan[int_x, int_y] == 1
+            and not check_collision(new_position, None, robots, floor_plan, robot_diameter)):
+            
+            orientation = np.random.uniform(0, 2 * np.pi)
+            robot = {
+                'position': new_position,
+                'orientation': orientation,
+                'sensors': sensor_selections.copy(),
+                'distance_traveled': 0.0
+            }
+            robots.append(robot)
+            print(f"RESCUE Roller deployed at ({int_x}, {int_y}) with orientation {orientation:.2f} radians")
+            adding_rr[0] = False
+        else:
+            print("Cannot deploy RESCUE Roller at this position. It may be blocked or occupied.")
+            adding_rr[0] = False
+
+    def start_sensor_selection():
+        selecting_sensors[0] = True
+        sensor_selections.clear()
+        
+        # Create axes for the checkbuttons
+        check_ax = plt.axes([0.85, 0.5, 0.1, 0.15])  # Adjust position as needed
+        sensor_check = CheckButtons(check_ax, sensor_options, [True]*len(sensor_options))
+        
+        sensor_widgets['check'] = sensor_check
+        sensor_widgets['check_ax'] = check_ax
+        
+        # Create OK button
+        ok_ax = plt.axes([0.85, 0.45, 0.1, 0.04])
+        ok_button = Button(ok_ax, 'OK')
+        sensor_widgets['ok_button'] = ok_button
+        sensor_widgets['ok_ax'] = ok_ax
+        
+        # Store connection IDs
+        sensor_widgets['ok_button_cid'] = None
+        sensor_widgets['sensor_check_cid'] = None
+
+        # Define callback for OK button
+        def on_ok_clicked(event):
+            # Read the selections
+            selections = sensor_check.get_status()
+            for option, selected in zip(sensor_options, selections):
+                sensor_selections[option] = selected
+            # Clean up the buttons
+            # Disconnect event handlers
+            ok_button.disconnect(sensor_widgets['ok_button_cid'])
+            sensor_check.disconnect(sensor_widgets['sensor_check_cid'])
+            # Remove the widgets
+            sensor_check.ax.remove()
+            ok_button.ax.remove()
+            fig.canvas.draw_idle()
+            
+            selecting_sensors[0] = False
+            print("Sensor selection completed.")
+            print(f"Selected sensors: {sensor_selections}")
+            # Now proceed to place the robot (if adding_robot[0] is True)
+            if adding_robot[0]:
+                print("Click on map to place the robot.")
+            elif adding_rr[0]:
+                # For Drop RR, proceed to create the robot
+                create_robot_after_sensor_selection()
+            # Delete widget references
+            del sensor_widgets['check']
+            del sensor_widgets['ok_button']
+        
+        # Connect the event handlers and store the connection IDs
+        sensor_widgets['ok_button_cid'] = ok_button.on_clicked(on_ok_clicked)
+        sensor_widgets['sensor_check_cid'] = sensor_check.on_clicked(lambda label: None)
+        
+        plt.draw()
+
+    # Updated on_click function
     def on_click(event):
         if event.inaxes == axes[0]:
-            
+            if selecting_sensors[0]:
+                print("Please complete sensor selection first.")
+                return
             ix, iy = event.xdata, event.ydata
             int_x, int_y = int(round(iy)), int(round(ix))
 
@@ -89,7 +167,12 @@ def main():
                     
                     if adding_robot[0]:
                         orientation = np.random.uniform(0, 2 * np.pi)
-                        robot = {'position': (iy, ix), 'orientation': orientation}
+                        robot = {
+                            'position': (iy, ix),
+                            'orientation': orientation,
+                            'sensors': sensor_selections.copy(),
+                            'distance_traveled': 0.0
+                        }
                         robots.append(robot)
                         
                         plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
@@ -100,7 +183,6 @@ def main():
                         plt.draw()
                         print(f"Robot added at ({int_x}, {int_y}) with orientation {orientation:.2f} radians")
                         adding_robot[0] = False
-                    
                     elif adding_vine_robot_stage[0] == 1:       # 1. set starting position
                         vine_robot['positions'] = [(iy, ix)]
                         vine_robot['active'] = False
@@ -195,7 +277,15 @@ def main():
         plt.draw()
         print("Simulation reset.")
 
-   
+    def add_robot(event, adding_robot, adding_vine_robot_stage, adding_heat_source):
+        if selecting_sensors[0]:
+            print("Please complete the current sensor selection first.")
+            return
+        adding_robot[0] = True
+        adding_vine_robot_stage[0] = 0
+        adding_heat_source[0] = False
+        start_sensor_selection()
+
     button_width = 0.08
     button_height = 0.04
     button_spacing = 0.01
@@ -224,7 +314,11 @@ def main():
     # funcs I managed to pull out
     btn_speed_up.on_clicked(functools.partial(speed_up, pause_duration=pause_duration))
     btn_slow_down.on_clicked(functools.partial(slow_down, pause_duration=pause_duration))
+    
     add_bot_button.on_clicked(functools.partial(add_robot, adding_robot=adding_robot, adding_vine_robot_stage=adding_vine_robot_stage, adding_heat_source=adding_heat_source))
+    drop_rescue_button.on_clicked(drop_rescue_roller)
+
+    
     add_vine_button.on_clicked(functools.partial(add_vine_robot, adding_vine_robot_stage=adding_vine_robot_stage, adding_robot=adding_robot, adding_heat_source=adding_heat_source))
     start_button.on_clicked(functools.partial(start_simulation, robots=robots, vine_robot=vine_robot, simulation_running=simulation_running, start_button=start_button))
     kill_button.on_clicked(functools.partial(kill_simulation, fig=fig))
@@ -241,7 +335,6 @@ def main():
     plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
     plt.draw()
 
-
     # ================================================================================================================================
     # Main Loop
     # ================================================================================================================================
@@ -251,7 +344,7 @@ def main():
             cone_points_list = []
             
             for robot in robots:
-                known_map, cone_points, known_heat_map = sense_environment(robot, floor_plan, known_map, heat_map_enabled[0], heat_source_position[0], known_heat_map)
+                known_map, cone_points, known_heat_map = sense_environment(robot, floor_plan, known_map, heat_map_enabled[0], heat_source_position[0], known_heat_map, robot_diameter)
                 cone_points_list.append(cone_points)
 
             plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
