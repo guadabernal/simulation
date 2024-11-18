@@ -31,7 +31,6 @@ def get_triangle_vertices(x, y, orientation, size=0.7):
     return [(tip_x, tip_y), (base_left_x, base_left_y), (base_right_x, base_right_y)]
 
 def get_marker_size(ax, robot_diameter):
-    # Get the transformation from data to display
     fig = ax.get_figure()
     dpi = fig.dpi
     bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
@@ -43,20 +42,17 @@ def get_marker_size(ax, robot_diameter):
     x_range = xlim[1] - xlim[0]
     y_range = ylim[1] - ylim[0]
 
-    # Compute pixels per data unit
+    # pixels per data unit
     x_pixels_per_unit = (width_inch * dpi) / x_range
     y_pixels_per_unit = (height_inch * dpi) / y_range
-
-    # Since markers are circular, we'll take the average
     pixels_per_unit = (x_pixels_per_unit + y_pixels_per_unit) / 2
 
-    # Diameter in pixels
+    # diameter in pixels
     diameter_in_pixels = robot_diameter * pixels_per_unit
 
-    # Matplotlib's scatter marker size 's' is in points squared
-    # There are 72 points per inch
+    # scatter marker size s is points squared, 72 points per inch
     diameter_in_points = diameter_in_pixels * 72 / dpi
-    area_in_points_squared = (diameter_in_points / 2) ** 2 * np.pi  # Area of circle
+    area_in_points_squared = (diameter_in_points / 2) ** 2 * np.pi  # area of circle
 
     return area_in_points_squared
 
@@ -73,7 +69,6 @@ def plot_floor_plan(floor_plan, robots, vine_robot, ax, robot_diameter, heat_map
         vine_positions = np.array(vine_robot['positions'])
         ax.plot(vine_positions[:, 1], vine_positions[:, 0], color='darkgreen', linewidth=5, zorder=2)
 
-    # Calculate marker size based on robot diameter
     marker_size = get_marker_size(ax, robot_diameter)
 
     for robot in robots:
@@ -98,7 +93,6 @@ def plot_robot_view(known_map, robots, vine_robot, cone_points_list, ax, robot_d
     cmap_known = colors.ListedColormap(['grey', 'white', 'black'])  # 0: grey (unknown), 1: white (free), 2: black (obstacle)
     display_map = np.full_like(known_map, fill_value=0)  # initialize with unknown (grey)
 
-    # Map known_map values to display indices
     display_map[known_map == -1] = 0  # Unknown areas to index 0 (grey)
     display_map[known_map == 1] = 1   # Free space to index 1 (white)
     display_map[known_map == 0] = 2   # Obstacles to index 2 (black)
@@ -108,7 +102,6 @@ def plot_robot_view(known_map, robots, vine_robot, cone_points_list, ax, robot_d
         vine_positions = np.array(vine_robot['positions'])
         ax.plot(vine_positions[:, 1], vine_positions[:, 0], color='darkgreen', linewidth=5, zorder=2)
 
-    # Calculate marker size based on robot diameter
     marker_size = get_marker_size(ax, robot_diameter)
 
     for robot in robots:

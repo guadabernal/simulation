@@ -58,7 +58,6 @@ def main():
     adding_vine_robot_stage = [0]  # 0: not adding 1: need start point 2: need orientation point
     step = 0
 
-    # Updated drop_rescue_roller function
     def drop_rescue_roller(event):
         if len(vine_robot['positions']) > 0:
             if selecting_sensors[0]:
@@ -152,7 +151,6 @@ def main():
         
         plt.draw()
 
-    # Updated on_click function
     def on_click(event):
         if event.inaxes == axes[0]:
             if selecting_sensors[0]:
