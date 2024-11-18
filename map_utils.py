@@ -30,7 +30,37 @@ def get_triangle_vertices(x, y, orientation, size=0.7):
 
     return [(tip_x, tip_y), (base_left_x, base_left_y), (base_right_x, base_right_y)]
 
-def plot_floor_plan(floor_plan, robots, vine_robot, ax, heat_map_enabled=False, heat_source_position=None):
+def get_marker_size(ax, robot_diameter):
+    # Get the transformation from data to display
+    fig = ax.get_figure()
+    dpi = fig.dpi
+    bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    width_inch = bbox.width
+    height_inch = bbox.height
+
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    x_range = xlim[1] - xlim[0]
+    y_range = ylim[1] - ylim[0]
+
+    # Compute pixels per data unit
+    x_pixels_per_unit = (width_inch * dpi) / x_range
+    y_pixels_per_unit = (height_inch * dpi) / y_range
+
+    # Since markers are circular, we'll take the average
+    pixels_per_unit = (x_pixels_per_unit + y_pixels_per_unit) / 2
+
+    # Diameter in pixels
+    diameter_in_pixels = robot_diameter * pixels_per_unit
+
+    # Matplotlib's scatter marker size 's' is in points squared
+    # There are 72 points per inch
+    diameter_in_points = diameter_in_pixels * 72 / dpi
+    area_in_points_squared = (diameter_in_points / 2) ** 2 * np.pi  # Area of circle
+
+    return area_in_points_squared
+
+def plot_floor_plan(floor_plan, robots, vine_robot, ax, robot_diameter, heat_map_enabled=False, heat_source_position=None):
     ax.clear()
     cmap_floor = colors.ListedColormap(['black', 'white'])  # 0: black (obstacle), 1: white (free space)
     ax.imshow(floor_plan, cmap=cmap_floor, origin='lower')
@@ -43,15 +73,18 @@ def plot_floor_plan(floor_plan, robots, vine_robot, ax, heat_map_enabled=False, 
         vine_positions = np.array(vine_robot['positions'])
         ax.plot(vine_positions[:, 1], vine_positions[:, 0], color='darkgreen', linewidth=5, zorder=2)
 
+    # Calculate marker size based on robot diameter
+    marker_size = get_marker_size(ax, robot_diameter)
+
     for robot in robots:
         x, y = robot['position']
         orientation = robot['orientation']
 
         # plot robot circle
-        ax.scatter(y, x, s=200, c='blue', edgecolors='black', zorder=3)
+        ax.scatter(y, x, s=marker_size, c='blue', edgecolors='black', zorder=3)
 
         # triangle indicates robot orientation
-        vertices = get_triangle_vertices(x, y, orientation)
+        vertices = get_triangle_vertices(x, y, orientation, size=robot_diameter/2)
         triangle = plt.Polygon(vertices, color='red', ec='black', lw=1, alpha=0.7, zorder=4)
         ax.add_patch(triangle)
 
@@ -60,7 +93,7 @@ def plot_floor_plan(floor_plan, robots, vine_robot, ax, heat_map_enabled=False, 
     ax.set_yticks([])
     ax.set_title("Floor Plan")
 
-def plot_robot_view(known_map, robots, vine_robot, cone_points_list, ax):
+def plot_robot_view(known_map, robots, vine_robot, cone_points_list, ax, robot_diameter):
     ax.clear()
     cmap_known = colors.ListedColormap(['grey', 'white', 'black'])  # 0: grey (unknown), 1: white (free), 2: black (obstacle)
     display_map = np.full_like(known_map, fill_value=0)  # initialize with unknown (grey)
@@ -75,11 +108,14 @@ def plot_robot_view(known_map, robots, vine_robot, cone_points_list, ax):
         vine_positions = np.array(vine_robot['positions'])
         ax.plot(vine_positions[:, 1], vine_positions[:, 0], color='darkgreen', linewidth=5, zorder=2)
 
+    # Calculate marker size based on robot diameter
+    marker_size = get_marker_size(ax, robot_diameter)
+
     for robot in robots:
         x, y = robot['position']
         orientation = robot['orientation']
-        ax.scatter(y, x, s=200, c='blue', edgecolors='black', zorder=3)
-        vertices = get_triangle_vertices(x, y, orientation)
+        ax.scatter(y, x, s=marker_size, c='blue', edgecolors='black', zorder=3)
+        vertices = get_triangle_vertices(x, y, orientation, size=robot_diameter/2)
         triangle = plt.Polygon(vertices, color='red', ec='black', lw=1, alpha=0.7, zorder=4)
         ax.add_patch(triangle)
 

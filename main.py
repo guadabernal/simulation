@@ -6,29 +6,15 @@ from matplotlib.gridspec import GridSpec
 import functools
 
 from map_utils import generate_floor_plan, plot_floor_plan, plot_robot_view, plot_known_heat_map
-from robot_utils import move_robot, sense_environment, is_position_occupied
+from robot_utils import move_robot, sense_environment, check_collision
 from vine_robot_utils import move_vine_robot
 
 from gui_utils import speed_up, slow_down, start_simulation, add_robot, add_vine_robot, kill_simulation, add_heat_map
 
 
-# To Do Tasks:
-#   1. accurate collision physics
-#   2. Find details on the following:
-#       - grade or incline angle of surfaces
-#       - obstacle density
-#       - verticle and horizontal area coverage
-#       - frequency of floor gaps and gap widths
-#       - minimum aperture size
-#   3. Add zones for ground differences above
-#   4. Add sensor details in the simulation
-
-# Meeting Notes:
-# The goal is to 1. generate a baseline on power consumption required, 2. figure out optimal sensor split.
-# Get list of papers that do 2D multi agent algorithms and see what experiments they conducted
-
 def main():
     grid_size = (50, 50)
+    robot_diameter = 4.0
 
     # x,y,width,height
     walls = [ (5, 5, 10, 2),  
@@ -80,7 +66,7 @@ def main():
             if ( 0 <= int_x < floor_plan.shape[0]
                 and 0 <= int_y < floor_plan.shape[1]
                 and floor_plan[int_x, int_y] == 1
-                and not is_position_occupied(new_position, None, robots)):
+                and not check_collision(new_position, None, robots, floor_plan, robot_diameter)):
                 
                 orientation = np.random.uniform(0, 2 * np.pi)
                 robot = {'position': new_position, 'orientation': orientation}
@@ -99,17 +85,18 @@ def main():
 
             # check not in wall
             if 0 <= int_x < floor_plan.shape[0] and 0 <= int_y < floor_plan.shape[1]:
-                if floor_plan[int_x, int_y] == 1 and not is_position_occupied((iy, ix), None, robots):
+                if floor_plan[int_x, int_y] == 1 and not check_collision((iy, ix), None, robots, floor_plan, robot_diameter):
                     
                     if adding_robot[0]:
                         orientation = np.random.uniform(0, 2 * np.pi)
                         robot = {'position': (iy, ix), 'orientation': orientation}
                         robots.append(robot)
                         
-                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], heat_map_enabled[0], heat_source_position[0])
-                        plot_robot_view(known_map, robots, vine_robot, [], axes[1])
+                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
+                        plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
 
-                        if heat_map_enabled[0] and len(axes) == 3: plot_known_heat_map(known_heat_map, axes[2])
+                        if heat_map_enabled[0] and len(axes) == 3:
+                            plot_known_heat_map(known_heat_map, axes[2])
                         plt.draw()
                         print(f"Robot added at ({int_x}, {int_y}) with orientation {orientation:.2f} radians")
                         adding_robot[0] = False
@@ -130,10 +117,11 @@ def main():
                         vine_robot['active'] = True
                         adding_vine_robot_stage[0] = 0
                         
-                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], heat_map_enabled[0], heat_source_position[0])
-                        plot_robot_view(known_map, robots, vine_robot, [], axes[1])
+                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
+                        plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
                         
-                        if heat_map_enabled[0] and len(axes) == 3: plot_known_heat_map(known_heat_map, axes[2])
+                        if heat_map_enabled[0] and len(axes) == 3:
+                            plot_known_heat_map(known_heat_map, axes[2])
                         plt.draw()
                         print(f"Vine robot orientation set. It will move at angle {orientation:.2f} radians.")
                     
@@ -143,11 +131,12 @@ def main():
                         adding_heat_source[0] = False
                         
                         add_third_plot()
-                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], heat_map_enabled[0], heat_source_position[0])
+                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
                         plot_known_heat_map(known_heat_map, axes[2])
                         plt.draw()
                         print(f"Heat source added at ({int_x}, {int_y}).")
-                    else: pass
+                    else:
+                        pass
                 else:
                     print("Cannot place on a wall or occupied space. Please select a free space.")
             else:
@@ -156,7 +145,8 @@ def main():
     def add_third_plot():   # just for heat map
         nonlocal axes, gs
         if len(axes) < 3:
-            for ax in axes: ax.remove()
+            for ax in axes:
+                ax.remove()
 
             gs = GridSpec(1, 3, figure=fig)
 
@@ -167,8 +157,8 @@ def main():
             axes.clear()
             axes.extend([ax_floor_plan, ax_robot_view, ax_heat_map])
 
-            plot_floor_plan(floor_plan, robots, vine_robot, axes[0], heat_map_enabled[0], heat_source_position[0])
-            plot_robot_view(known_map, robots, vine_robot, [], axes[1])
+            plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
+            plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
             plot_known_heat_map(known_heat_map, axes[2])
 
             plt.draw()
@@ -188,7 +178,8 @@ def main():
         adding_vine_robot_stage[0] = 0
         step = 0
 
-        for ax in axes: ax.clear()
+        for ax in axes:
+            ax.clear()
 
         if len(axes) == 3:
             axes[2].remove()
@@ -197,8 +188,8 @@ def main():
             axes[0] = fig.add_subplot(gs[0, 0])
             axes[1] = fig.add_subplot(gs[0, 1])
 
-        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], heat_map_enabled[0], heat_source_position[0])
-        plot_robot_view(known_map, robots, vine_robot, [], axes[1])
+        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
+        plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
 
         start_button.ax.set_visible(True)
         plt.draw()
@@ -246,8 +237,8 @@ def main():
 
     cid = fig.canvas.mpl_connect('button_press_event', on_click)
 
-    plot_floor_plan(floor_plan, robots, vine_robot, axes[0], heat_map_enabled[0], heat_source_position[0])
-    plot_robot_view(known_map, robots, vine_robot, [], axes[1])
+    plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
+    plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
     plt.draw()
 
 
@@ -263,14 +254,14 @@ def main():
                 known_map, cone_points, known_heat_map = sense_environment(robot, floor_plan, known_map, heat_map_enabled[0], heat_source_position[0], known_heat_map)
                 cone_points_list.append(cone_points)
 
-            plot_floor_plan(floor_plan, robots, vine_robot, axes[0],heat_map_enabled[0], heat_source_position[0])
-            plot_robot_view(known_map, robots, vine_robot, cone_points_list, axes[1])
+            plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
+            plot_robot_view(known_map, robots, vine_robot, cone_points_list, axes[1], robot_diameter)
 
             if heat_map_enabled[0] and len(axes) == 3:
                 plot_known_heat_map(known_heat_map, axes[2])
 
             for robot in robots:
-                move_robot(robot, robots, floor_plan)
+                move_robot(robot, robots, floor_plan, robot_diameter)
 
             if vine_robot['active']:
                 move_vine_robot(vine_robot, floor_plan)
