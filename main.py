@@ -13,8 +13,8 @@ from gui_utils import speed_up, slow_down, start_simulation, add_vine_robot, kil
 
 
 def main():
-    grid_size = (105, 150)
-    robot_diameter = 0.8  # Define robot diameter
+    grid_size = (210, 300)
+    robot_diameter = 1.6  # Define robot diameter
 
     # x,y,width,height
     # walls = [ (5, 5, 10, 2),  
@@ -27,56 +27,57 @@ def main():
     # gaps between walls = 10 = 36 inches => RR 2.something ish inches so 0.8 diameter
 
     walls = [       # BORDERS
-                (0,     0,     2,    105),
-                (148,   0,     2,    105),
+                (0,     0,     4,    210),
+                (296,   0,     4,    210),
 
-                (0,     0,     150,  2),  
-                (0,     103,   150,  2),  
+                (0,     0,     300,  4),  
+                (0,     206,   300,  4),  
                 
                     # TOP
-                (34,    82,    2,    22),
-                (76,    82,    2,    22),
+                (68,    164,   4,    44),
+                (152,   164,   4,    44),
 
                 
-                (1,     80,    19,   2),
-                (30,    80,    33,   2),
-                (76,    80,    8,   2),
-                (95,    80,    28,   2),
+                (2,     160,   38,   4),
+                (60,    160,   66,   4),
+                (152,   160,   16,   4),
+                (190,   160,   56,   4),
 
                     # BOTTOM
-                (36,    2,     2,    21),
-                (59,    1,     2,    21),
-                (94,    2,     2,    5),
-                (94,    13,    2,    9),
+                (72,    4,     4,    42),
+                (118,   2,     4,    42),
+                (188,   4,     4,    10),
+                (188,   26,    4,    18),
 
-                (59,    21,    37,   2),
-                (1,     21,    19,   2), 
-                (30,    21,    7,    2),
+                (118,   42,    74,   4),
+                (2,     42,    38,   4), 
+                (60,    42,    14,   4),
 
                     # MIDDLE
-                (74,    35,    2,    30),
-                (37,    35,    2,    6),
-                (37,    49,    2,    8),
-                (37,    61,    2,    6),
-                (102,   36,    2,    5),
-                (102,   47,    2,    9),
-                (102,   62,    2,    4),
+                (148,   70,    4,    60),
+                (74,    70,    4,    12),
+                (74,    98,    4,    16),
+                (74,    122,   4,    12),
+                (204,   72,    4,    10),
+                (204,   94,    4,    18),
+                (204,   124,   4,    8),
                 
-                (1,     52,    37,   2),
-                (1,     65,    54,   2),
-                (1,     34,    54,   2),
-                (65,    34,    41,   2),
-                (65,    65,    39,   2),
-                (75,    51,    27,   2),
+                (2,     104,   74,   4),
+                (2,     130,   108,  4),
+                (2,     68,    108,  4),
+                (130,   68,    82,   4),
+                (130,   130,   78,   4),
+                (150,   102,   54,   4),
                     
                     # RIGHT
-                (122,   17,    2,    52),
-                (122,   75,    2,    29),
+                (244,   34,    4,    104),
+                (244,   150,   4,    58),
 
-                (122,   59,    28,   2),
-                (122,   16,    13,   2),
-                (145,   16,    7,    2),
+                (244,   118,   56,   4),
+                (244,   32,    26,   4),
+                (290,   32,    14,   4),
         ]
+
 
 
     floor_plan = generate_floor_plan(grid_size, walls)
@@ -367,11 +368,7 @@ def main():
     # funcs I managed to pull out
     btn_speed_up.on_clicked(functools.partial(speed_up, pause_duration=pause_duration))
     btn_slow_down.on_clicked(functools.partial(slow_down, pause_duration=pause_duration))
-    
     add_bot_button.on_clicked(functools.partial(add_robot, adding_robot=adding_robot, adding_vine_robot_stage=adding_vine_robot_stage, adding_heat_source=adding_heat_source))
-    drop_rescue_button.on_clicked(drop_rescue_roller)
-
-    
     add_vine_button.on_clicked(functools.partial(add_vine_robot, adding_vine_robot_stage=adding_vine_robot_stage, adding_robot=adding_robot, adding_heat_source=adding_heat_source))
     start_button.on_clicked(functools.partial(start_simulation, robots=robots, vine_robot=vine_robot, simulation_running=simulation_running, start_button=start_button))
     kill_button.on_clicked(functools.partial(kill_simulation, fig=fig))
