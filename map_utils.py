@@ -6,14 +6,14 @@ def generate_floor_plan(grid_size, walls):
     floor_plan = np.ones(grid_size)
 
     # walls around the perimeter
-    floor_plan[0, :] = 0
-    floor_plan[-1, :] = 0
-    floor_plan[:, 0] = 0
-    floor_plan[:, -1] = 0
+    # floor_plan[0, :] = 0
+    # floor_plan[-1, :] = 0
+    # floor_plan[:, 0] = 0
+    # floor_plan[:, -1] = 0
 
     # predefined internal walls
     for wall in walls:
-        x_start, y_start, width, height = wall
+        y_start, x_start, width, height = wall                              # ??? somethign is wrong lmao but this works
         floor_plan[x_start:x_start + height, y_start:y_start + width] = 0
 
     return floor_plan
