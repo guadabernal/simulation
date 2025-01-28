@@ -1,5 +1,8 @@
 import sys
+import time
+
 import numpy as np
+from numba import cuda
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, CheckButtons
 from matplotlib.gridspec import GridSpec
@@ -9,110 +12,30 @@ from map_utils import generate_floor_plan, plot_floor_plan, plot_robot_view, plo
 from robot_utils import move_robot, sense_environment, check_collision
 from vine_robot_utils import move_vine_robot
 
+import cnst
+
 from gui_utils import speed_up, slow_down, start_simulation, add_vine_robot, kill_simulation, add_heat_map
 
 
 def main():
-    grid_size = (210, 300)
-    robot_diameter = 1.6  # Define robot diameter
-
-    # x,y,width,height
-    # walls = [ (5, 5, 10, 2),  
-    #           (10, 15, 2, 10),
-    #           (20, 5, 2, 30), 
-    #           (30, 25, 15, 2),
-    #           (40, 10, 2, 15),
-    #         ]
-
-    # gaps between walls = 10 = 36 inches => RR 2.something ish inches so 0.8 diameter
-
-    walls = [       # BORDERS
-                (0,     0,     4,    210),
-                (296,   0,     4,    210),
-
-                (0,     0,     300,  4),  
-                (0,     206,   300,  4),  
-                
-                    # TOP
-                (68,    164,   4,    44),
-                (152,   164,   4,    44),
-
-                
-                (2,     160,   38,   4),
-                (60,    160,   66,   4),
-                (152,   160,   16,   4),
-                (190,   160,   56,   4),
-
-                    # BOTTOM
-                (72,    4,     4,    42),
-                (118,   2,     4,    42),
-                (188,   4,     4,    10),
-                (188,   26,    4,    18),
-
-                (118,   42,    74,   4),
-                (2,     42,    38,   4), 
-                (60,    42,    14,   4),
-
-                    # MIDDLE
-                (148,   70,    4,    60),
-                (74,    70,    4,    12),
-                (74,    98,    4,    16),
-                (74,    122,   4,    12),
-                (204,   72,    4,    10),
-                (204,   94,    4,    18),
-                (204,   124,   4,    8),
-                
-                (2,     104,   74,   4),
-                (2,     130,   108,  4),
-                (2,     68,    108,  4),
-                (130,   68,    82,   4),
-                (130,   130,   78,   4),
-                (150,   102,   54,   4),
-                    
-                    # RIGHT
-                (244,   34,    4,    104),
-                (244,   150,   4,    58),
-
-                (244,   118,   56,   4),
-                (244,   32,    26,   4),
-                (290,   32,    14,   4),
-        ]
-
-
-
-    floor_plan = generate_floor_plan(grid_size, walls)
     
-    known_map = -1 * np.ones(grid_size)
-    known_heat_map = -1 * np.ones(grid_size)
+    floor_plan = generate_floor_plan(cnst.GRID_SIZE, cnst.MAP)
+    known_map = -1 * np.ones(cnst.GRID_SIZE)
+    known_heat_map = -1 * np.ones(cnst.GRID_SIZE)
 
     robots = []
     vine_robot = {'positions': [], 'active': False, 'orientation': None}
 
-    heat_map_enabled = [False]
-    adding_heat_source = [False]
+    heat_map_enabled     = [False]
+    adding_heat_source   = [False]
+    simulation_running   = [False]
+    adding_robot         = [False]
     heat_source_position = [None]
-    simulation_running = [False]
-    adding_robot = [False]
 
-    sensor_options = ['Cone Vision', 'Heat Sensor']
     selecting_sensors = [False]
     sensor_selections = {}
     sensor_widgets = {}
     adding_rr = [False]
-
-    plt.ion()
-
-    # GridSpec dynamic subplot
-    fig = plt.figure(figsize=(12, 6))
-    gs = GridSpec(1, 2, figure=fig)
-
-    ax_floor_plan = fig.add_subplot(gs[0, 0])
-    ax_robot_view = fig.add_subplot(gs[0, 1])
-    axes = [ax_floor_plan, ax_robot_view]
-
-    pause_duration = [0.1]
-    adding_vine_robot_stage = [0]  # 0: not adding 1: need start point 2: need orientation point
-    step = 0
 
     def drop_rescue_roller(event):
         if len(vine_robot['positions']) > 0:
@@ -136,7 +59,7 @@ def main():
         if ( 0 <= int_x < floor_plan.shape[0]
             and 0 <= int_y < floor_plan.shape[1]
             and floor_plan[int_x, int_y] == 1
-            and not check_collision(new_position, None, robots, floor_plan, robot_diameter)):
+            and not check_collision(new_position, None, robots, floor_plan, cnst.ROBOT_DIAM)):
             
             orientation = np.random.uniform(0, 2 * np.pi)
             robot = {
@@ -156,34 +79,25 @@ def main():
         selecting_sensors[0] = True
         sensor_selections.clear()
         
-        # Create axes for the checkbuttons
-        check_ax = plt.axes([0.85, 0.5, 0.1, 0.15])  # Adjust position as needed
-        sensor_check = CheckButtons(check_ax, sensor_options, [True]*len(sensor_options))
+        check_ax = plt.axes([0.85, 0.5, 0.1, 0.15])
+        sensor_check = CheckButtons(check_ax, cnst.SENSOR_OPT, [True]*len(cnst.SENSOR_OPT))
         
         sensor_widgets['check'] = sensor_check
         sensor_widgets['check_ax'] = check_ax
         
-        # Create OK button
         ok_ax = plt.axes([0.85, 0.45, 0.1, 0.04])
         ok_button = Button(ok_ax, 'OK')
         sensor_widgets['ok_button'] = ok_button
         sensor_widgets['ok_ax'] = ok_ax
-        
-        # Store connection IDs
         sensor_widgets['ok_button_cid'] = None
         sensor_widgets['sensor_check_cid'] = None
 
-        # Define callback for OK button
         def on_ok_clicked(event):
-            # Read the selections
             selections = sensor_check.get_status()
-            for option, selected in zip(sensor_options, selections):
+            for option, selected in zip(cnst.SENSOR_OPT, selections):
                 sensor_selections[option] = selected
-            # Clean up the buttons
-            # Disconnect event handlers
             ok_button.disconnect(sensor_widgets['ok_button_cid'])
             sensor_check.disconnect(sensor_widgets['sensor_check_cid'])
-            # Remove the widgets
             sensor_check.ax.remove()
             ok_button.ax.remove()
             fig.canvas.draw_idle()
@@ -191,17 +105,13 @@ def main():
             selecting_sensors[0] = False
             print("Sensor selection completed.")
             print(f"Selected sensors: {sensor_selections}")
-            # Now proceed to place the robot (if adding_robot[0] is True)
             if adding_robot[0]:
                 print("Click on map to place the robot.")
             elif adding_rr[0]:
-                # For Drop RR, proceed to create the robot
                 create_robot_after_sensor_selection()
-            # Delete widget references
             del sensor_widgets['check']
             del sensor_widgets['ok_button']
         
-        # Connect the event handlers and store the connection IDs
         sensor_widgets['ok_button_cid'] = ok_button.on_clicked(on_ok_clicked)
         sensor_widgets['sensor_check_cid'] = sensor_check.on_clicked(lambda label: None)
         
@@ -217,7 +127,7 @@ def main():
 
             # check not in wall
             if 0 <= int_x < floor_plan.shape[0] and 0 <= int_y < floor_plan.shape[1]:
-                if floor_plan[int_x, int_y] == 1 and not check_collision((iy, ix), None, robots, floor_plan, robot_diameter):
+                if floor_plan[int_x, int_y] == 1 and not check_collision((iy, ix), None, robots, floor_plan, cnst.ROBOT_DIAM):
                     
                     if adding_robot[0]:
                         orientation = np.random.uniform(0, 2 * np.pi)
@@ -229,8 +139,8 @@ def main():
                         }
                         robots.append(robot)
                         
-                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
-                        plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
+                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], cnst.ROBOT_DIAM, heat_map_enabled[0], heat_source_position[0])
+                        plot_robot_view(known_map, robots, vine_robot, [], axes[1], cnst.ROBOT_DIAM)
 
                         if heat_map_enabled[0] and len(axes) == 3:
                             plot_known_heat_map(known_heat_map, axes[2])
@@ -253,8 +163,8 @@ def main():
                         vine_robot['active'] = True
                         adding_vine_robot_stage[0] = 0
                         
-                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
-                        plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
+                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], cnst.ROBOT_DIAM, heat_map_enabled[0], heat_source_position[0])
+                        plot_robot_view(known_map, robots, vine_robot, [], axes[1], cnst.ROBOT_DIAM)
                         
                         if heat_map_enabled[0] and len(axes) == 3:
                             plot_known_heat_map(known_heat_map, axes[2])
@@ -267,7 +177,7 @@ def main():
                         adding_heat_source[0] = False
                         
                         add_third_plot()
-                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
+                        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], cnst.ROBOT_DIAM, heat_map_enabled[0], heat_source_position[0])
                         plot_known_heat_map(known_heat_map, axes[2])
                         plt.draw()
                         print(f"Heat source added at ({int_x}, {int_y}).")
@@ -293,8 +203,8 @@ def main():
             axes.clear()
             axes.extend([ax_floor_plan, ax_robot_view, ax_heat_map])
 
-            plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
-            plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
+            plot_floor_plan(floor_plan, robots, vine_robot, axes[0], cnst.ROBOT_DIAM, heat_map_enabled[0], heat_source_position[0])
+            plot_robot_view(known_map, robots, vine_robot, [], axes[1], cnst.ROBOT_DIAM)
             plot_known_heat_map(known_heat_map, axes[2])
 
             plt.draw()
@@ -302,8 +212,8 @@ def main():
     def reset_simulation(event):
         nonlocal known_map, known_heat_map, robots, vine_robot, heat_map_enabled, adding_heat_source, heat_source_position, simulation_running, adding_robot, adding_vine_robot_stage, step, axes, gs
         
-        known_map = -1 * np.ones(grid_size)
-        known_heat_map = -1 * np.ones(grid_size)
+        known_map = -1 * np.ones(cnst.GRID_SIZE)
+        known_heat_map = -1 * np.ones(cnst.GRID_SIZE)
         robots.clear()
         vine_robot = {'positions': [], 'active': False, 'orientation': None}
         heat_map_enabled[0] = False
@@ -324,8 +234,8 @@ def main():
             axes[0] = fig.add_subplot(gs[0, 0])
             axes[1] = fig.add_subplot(gs[0, 1])
 
-        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
-        plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
+        plot_floor_plan(floor_plan, robots, vine_robot, axes[0], cnst.ROBOT_DIAM, heat_map_enabled[0], heat_source_position[0])
+        plot_robot_view(known_map, robots, vine_robot, [], axes[1], cnst.ROBOT_DIAM)
 
         start_button.ax.set_visible(True)
         plt.draw()
@@ -340,6 +250,19 @@ def main():
         adding_heat_source[0] = False
         start_sensor_selection()
 
+
+    plt.ion()
+
+    fig = plt.figure(figsize=cnst.FIG_SIZE)
+    gs = GridSpec(1, 2, figure=fig)
+
+    ax_floor_plan = fig.add_subplot(gs[0, 0])
+    ax_robot_view = fig.add_subplot(gs[0, 1])
+    axes = [ax_floor_plan, ax_robot_view]
+
+    pause_duration = [0.1]
+    adding_vine_robot_stage = [0]  # 0: not adding 1: need start point 2: need orientation point
+    
     button_width = 0.08
     button_height = 0.04
     button_spacing = 0.01
@@ -381,36 +304,29 @@ def main():
 
     cid = fig.canvas.mpl_connect('button_press_event', on_click)
 
-    plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
-    plot_robot_view(known_map, robots, vine_robot, [], axes[1], robot_diameter)
+    plot_floor_plan(floor_plan, robots, vine_robot, axes[0], cnst.ROBOT_DIAM, heat_map_enabled[0], heat_source_position[0])
+    plot_robot_view(known_map, robots, vine_robot, [], axes[1], cnst.ROBOT_DIAM)
     plt.draw()
 
     # ================================================================================================================================
     # Main Loop
     # ================================================================================================================================
-    max_steps = 1000
-    while step < max_steps:
+    
+    step = 0
+    while step < cnst.MAX_STEPS:
         if simulation_running[0]:
-            cone_points_list = []
+            known_map, cone_points_list, known_heat_map = sense_environment(robots, floor_plan, known_map, heat_map_enabled[0], heat_source_position[0], known_heat_map)
+            move_robot(robots, floor_plan)
             
-            for robot in robots:
-                known_map, cone_points, known_heat_map = sense_environment(robot, floor_plan, known_map, heat_map_enabled[0], heat_source_position[0], known_heat_map, robot_diameter)
-                cone_points_list.append(cone_points)
-
-            plot_floor_plan(floor_plan, robots, vine_robot, axes[0], robot_diameter, heat_map_enabled[0], heat_source_position[0])
-            plot_robot_view(known_map, robots, vine_robot, cone_points_list, axes[1], robot_diameter)
-
-            if heat_map_enabled[0] and len(axes) == 3:
-                plot_known_heat_map(known_heat_map, axes[2])
-
-            for robot in robots:
-                move_robot(robot, robots, floor_plan, robot_diameter)
-
-            if vine_robot['active']:
-                move_vine_robot(vine_robot, floor_plan)
-                
+            if vine_robot['active']: move_vine_robot(vine_robot, floor_plan)
+            
+            plot_floor_plan(floor_plan, robots, vine_robot, axes[0], cnst.ROBOT_DIAM, heat_map_enabled[0], heat_source_position[0])
+            plot_robot_view(known_map, robots, vine_robot, cone_points_list, axes[1], cnst.ROBOT_DIAM)
+            if heat_map_enabled[0] and len(axes) == 3: plot_known_heat_map(known_heat_map, axes[2])
             plt.pause(pause_duration[0])
+
             step += 1
+            print("step")
         else:
             plt.pause(0.1)
 
